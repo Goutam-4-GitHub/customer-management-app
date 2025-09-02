@@ -1,67 +1,56 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
 
 // Create new customer (with optional address)
-router.post('/', (req, res) => {
+router.post("/", (req, res) => {
   const { first_name, last_name, phone_number, address_details, city, state, pin_code } = req.body;
 
   if (!first_name || !last_name || !phone_number) {
-    return res.status(400).json({ error: 'First name, last name, and phone number are required' });
+    return res.status(400).json({ error: "First name, last name, and phone number are required" });
   }
 
-  const sql = `INSERT INTO customers (first_name, last_name, phone_number)
-               VALUES (?, ?, ?)`;
+  try {
+    // Insert customer
+    const stmt = req.db.prepare(
+      "INSERT INTO customers (first_name, last_name, phone_number) VALUES (?, ?, ?)"
+    );
+    const result = stmt.run(first_name, last_name, phone_number);
+    const customerId = result.lastInsertRowid;
 
-  req.db.run(sql, [first_name, last_name, phone_number], function (err) {
-    if (err) {
-      console.error(err.message);
-      if (err.message.includes("UNIQUE constraint failed")) {
-        return res.status(400).json({ error: "Phone number already exists" });
-      }
-      return res.status(400).json({ error: err.message });
-    }
-
-    const customerId = this.lastID;
-
-    // If address is provided, insert into addresses table
+    // If address is provided
     if (address_details && city && state && pin_code) {
-      const addressSql = `INSERT INTO addresses (customer_id, address_details, city, state, pin_code)
-                          VALUES (?, ?, ?, ?, ?)`;
+      const addressStmt = req.db.prepare(
+        "INSERT INTO addresses (customer_id, address_details, city, state, pin_code) VALUES (?, ?, ?, ?, ?)"
+      );
+      const addressResult = addressStmt.run(customerId, address_details, city, state, pin_code);
 
-      req.db.run(addressSql, [customerId, address_details, city, state, pin_code], function (err2) {
-        if (err2) {
-          console.error(err2.message);
-          return res.status(400).json({ error: err2.message });
-        }
-
-        res.status(201).json({
-          id: customerId,
-          first_name,
-          last_name,
-          phone_number,
-          address: {
-            id: this.lastID,
-            address_details,
-            city,
-            state,
-            pin_code
-          }
-        });
-      });
-    } else {
-      // No address provided
-      res.status(201).json({
+      return res.status(201).json({
         id: customerId,
         first_name,
         last_name,
-        phone_number
+        phone_number,
+        address: {
+          id: addressResult.lastInsertRowid,
+          address_details,
+          city,
+          state,
+          pin_code,
+        },
       });
     }
-  });
+
+    // If no address
+    res.status(201).json({ id: customerId, first_name, last_name, phone_number });
+  } catch (err) {
+    if (err.message.includes("UNIQUE constraint failed")) {
+      return res.status(400).json({ error: "Phone number already exists" });
+    }
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // Get all customers (with search, filter, pagination)
-router.get('/', (req, res) => {
+router.get("/", (req, res) => {
   let { page = 1, limit = 5, search, city, state, pin, sort = "id", order = "ASC" } = req.query;
   page = parseInt(page);
   limit = parseInt(limit);
@@ -91,54 +80,57 @@ router.get('/', (req, res) => {
   const sql = `SELECT * FROM customers ${whereSQL} ORDER BY ${sort} ${order} LIMIT ? OFFSET ?`;
   const countSql = `SELECT COUNT(*) as count FROM customers ${whereSQL}`;
 
-  req.db.all(sql, [...params, limit, offset], (err, rows) => {
-    if (err) return res.status(400).json({ error: err.message });
+  try {
+    const rows = req.db.prepare(sql).all(...params, limit, offset);
+    const countResult = req.db.prepare(countSql).get(...params);
 
-    req.db.get(countSql, params, (err, result) => {
-      if (err) return res.status(400).json({ error: err.message });
-
-      res.json({
-        data: rows,
-        total: result.count,
-        page,
-        totalPages: Math.ceil(result.count / limit),
-      });
+    res.json({
+      data: rows,
+      total: countResult.count,
+      page,
+      totalPages: Math.ceil(countResult.count / limit),
     });
-  });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // Get single customer
-router.get('/:id', (req, res) => {
-  const sql = `SELECT * FROM customers WHERE id = ?`;
-  req.db.get(sql, [req.params.id], (err, row) => {
-    if (err) return res.status(400).json({ error: err.message });
-    if (!row) return res.status(404).json({ error: 'Customer not found' });
+router.get("/:id", (req, res) => {
+  try {
+    const row = req.db.prepare("SELECT * FROM customers WHERE id = ?").get(req.params.id);
+    if (!row) return res.status(404).json({ error: "Customer not found" });
     res.json(row);
-  });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // Update customer
-router.put('/:id', (req, res) => {
+router.put("/:id", (req, res) => {
   const { first_name, last_name, phone_number } = req.body;
-  const sql = `UPDATE customers SET first_name=?, last_name=?, phone_number=? WHERE id=?`;
-  req.db.run(sql, [first_name, last_name, phone_number, req.params.id], function (err) {
-    if (err) {
-      if (err.message.includes("UNIQUE constraint failed")) {
-        return res.status(400).json({ error: "Phone number already exists" });
-      }
-      return res.status(400).json({ error: err.message });
+  try {
+    const result = req.db
+      .prepare("UPDATE customers SET first_name=?, last_name=?, phone_number=? WHERE id=?")
+      .run(first_name, last_name, phone_number, req.params.id);
+
+    res.json({ updated: result.changes });
+  } catch (err) {
+    if (err.message.includes("UNIQUE constraint failed")) {
+      return res.status(400).json({ error: "Phone number already exists" });
     }
-    res.json({ updated: this.changes });
-  });
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // Delete customer
-router.delete('/:id', (req, res) => {
-  const sql = `DELETE FROM customers WHERE id = ?`;
-  req.db.run(sql, [req.params.id], function (err) {
-    if (err) return res.status(400).json({ error: err.message });
-    res.json({ deleted: this.changes });
-  });
+router.delete("/:id", (req, res) => {
+  try {
+    const result = req.db.prepare("DELETE FROM customers WHERE id = ?").run(req.params.id);
+    res.json({ deleted: result.changes });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 module.exports = router;
