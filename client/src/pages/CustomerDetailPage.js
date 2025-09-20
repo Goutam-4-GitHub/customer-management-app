@@ -4,12 +4,15 @@ import axios from "axios";
 import AddressList from "../components/AddressList";
 import AddressForm from "../components/AddressForm";
 
+// Use your deployed backend URL
+const API_URL = "https://customer-management-app-backends.onrender.com/api";
+
 function CustomerDetailPage() {
   const { id } = useParams();
   const [customer, setCustomer] = useState(null);
 
   useEffect(() => {
-    axios.get(`http://localhost:5000/api/customers/${id}`)
+    axios.get(`${API_URL}/customers/${id}`)
       .then((res) => setCustomer(res.data))
       .catch((err) => console.error(err));
   }, [id]);
