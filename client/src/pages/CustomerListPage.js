@@ -2,6 +2,9 @@ import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 
+// Use your deployed backend API URL
+const API_URL = "https://customer-management-app-backends.onrender.com/api";
+
 function CustomerListPage() {
   const [customers, setCustomers] = useState([]);
   const [search, setSearch] = useState("");
@@ -14,11 +17,10 @@ function CustomerListPage() {
   // Fetch customers from backend
   const fetchCustomers = () => {
     axios
-      .get("http://localhost:5000/api/customers", {
+      .get(`${API_URL}/customers`, {
         params: { search, city, state, pin, page, limit: 5 },
       })
       .then((response) => {
-        // Backend might return array OR { data, totalPages }
         if (Array.isArray(response.data)) {
           setCustomers(response.data);
           setTotalPages(1);
@@ -55,7 +57,7 @@ function CustomerListPage() {
   const handleDelete = (id) => {
     if (window.confirm("Are you sure you want to delete this customer?")) {
       axios
-        .delete(`http://localhost:5000/api/customers/${id}`)
+        .delete(`${API_URL}/customers/${id}`)
         .then(() => {
           alert("Customer deleted successfully");
           fetchCustomers();

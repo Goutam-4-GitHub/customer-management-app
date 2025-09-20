@@ -1,6 +1,9 @@
 import React, { useState } from "react";
 import axios from "axios";
 
+// ✅ Use your deployed backend URL
+const API_URL = "https://customer-management-app-backends.onrender.com/api";
+
 function AddressForm({ customerId }) {
   const [form, setForm] = useState({
     address_details: "",
@@ -15,11 +18,11 @@ function AddressForm({ customerId }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    axios.post(`http://localhost:5000/api/customers/${customerId}/addresses`, form)
+    axios.post(`${API_URL}/customers/${customerId}/addresses`, form)
       .then((res) => {
         console.log("Address added:", res.data);
         setForm({ address_details: "", city: "", state: "", pin_code: "" });
-        window.location.reload(); // quick refresh for now
+        window.location.reload(); // refresh to show new data
       })
       .catch((err) => {
         alert(err.response?.data?.error || "Error adding address");
